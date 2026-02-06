@@ -21,15 +21,21 @@ export async function POST(request: NextRequest) {
     console.log('File type:', file.type);
     console.log('File size:', file.size);
 
-    // Проверяем тип файла
+    // Проверяем тип файла и расширение
     const allowedTypes = [
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
       'application/vnd.ms-excel', // .xls
       'text/csv', // .csv
+      'application/csv', // .csv
+      'text/plain', // иногда CSV приходят так
     ];
 
-    if (!allowedTypes.includes(file.type)) {
-      console.log('File type not allowed:', file.type);
+    // Также проверяем расширение файла как фоллбек
+    const fileName = file.name.toLowerCase();
+    const hasValidExtension = fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || fileName.endsWith('.csv');
+
+    if (!allowedTypes.includes(file.type) && !hasValidExtension) {
+      console.log('File type not allowed:', file.type, 'extension:', fileName.split('.').pop());
       return NextResponse.json(
         { error: 'Неподдерживаемый тип файла. Загрузите Excel (.xlsx, .xls) или CSV файл' },
         { status: 400 }

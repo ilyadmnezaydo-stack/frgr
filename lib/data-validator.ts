@@ -46,7 +46,7 @@ export class DataValidator {
    */
   private getExistingValues(existingRecords: any[], uniqueFields: string[]): Map<string, Set<any>> {
     const existingValues = new Map<string, Set<any>>();
-    
+
     for (const field of uniqueFields) {
       const values = new Set<any>();
       for (const record of existingRecords) {
@@ -56,7 +56,7 @@ export class DataValidator {
       }
       existingValues.set(field, values);
     }
-    
+
     return existingValues;
   }
 
@@ -69,13 +69,9 @@ export class DataValidator {
     targetTable: string,
     existingRecords?: any[]
   ): Promise<ValidationResult> {
-    console.log('=== Starting validation ===');
-    console.log('Data length:', data.length);
-    console.log('Mappings:', mappings);
-    console.log('Target table:', targetTable);
-    
-    const errors: string[] = [];
-    const warnings: string[] = [];
+
+    const errors: ValidationError[] = [];
+    const warnings: ValidationWarning[] = [];
     const transformedData: any[] = [];
     const rules = this.rules.get(targetTable) || [];
 
@@ -92,14 +88,11 @@ export class DataValidator {
         const targetField = mapping.targetField;
         const fieldRules = rules.filter(rule => rule.field === targetField);
 
-        console.log(`Processing mapping: ${mapping.sourceField} -> ${targetField}, value:`, sourceValue);
 
         // Transform value if needed
         let transformedValue = sourceValue;
         if (mapping.transformation) {
-          console.log(`Applying transformation: ${mapping.transformation} to value:`, transformedValue);
           transformedValue = this.applyTransformation(sourceValue, mapping.transformation);
-          console.log('Transformed value:', transformedValue);
         }
 
         // Validate field
@@ -111,11 +104,6 @@ export class DataValidator {
           rowIndex
         );
 
-        console.log(`Field validation result:`, {
-          isValid: fieldValidation.isValid,
-          errorsCount: fieldValidation.errors.length,
-          warningsCount: fieldValidation.warnings.length
-        });
 
         errors.push(...fieldValidation.errors);
         warnings.push(...fieldValidation.warnings);
@@ -123,17 +111,11 @@ export class DataValidator {
         // Only add valid values to transformed data
         if (fieldValidation.isValid) {
           transformedRow[targetField] = transformedValue;
-          console.log(`Added to transformed row: ${targetField} =`, transformedValue);
         }
       }
 
       transformedData.push(transformedRow);
     }
-
-    console.log('=== Validation completed ===');
-    console.log('Transformed data length:', transformedData.length);
-    console.log('Total errors:', errors.length);
-    console.log('Total warnings:', warnings.length);
 
     return {
       isValid: errors.length === 0,
@@ -264,7 +246,7 @@ export class DataValidator {
       case 'char':
       case 'nvarchar':
         return typeof value === 'string';
-      
+
       case 'number':
       case 'integer':
       case 'int':
@@ -280,7 +262,7 @@ export class DataValidator {
           return !isNaN(Number(cleanValue)) && cleanValue !== '';
         }
         return false;
-      
+
       case 'boolean':
       case 'bool':
       case 'bit':
@@ -291,25 +273,25 @@ export class DataValidator {
           return ['true', 'false', '1', '0', 'yes', 'no', 'да', 'нет', 'on', 'off'].includes(lowerValue);
         }
         return false;
-      
+
       case 'email':
         return typeof value === 'string' && this.isValidEmail(value);
-      
+
       case 'phone':
         return typeof value === 'string' && this.isValidPhone(value);
-      
+
       case 'uuid':
         return typeof value === 'string' && this.isValidUUID(value);
-      
+
       case 'date':
       case 'datetime':
       case 'timestamp':
       case 'timstamptz':
         return !isNaN(Date.parse(value)) && value !== '';
-      
+
       case 'url':
         return typeof value === 'string' && this.isValidURL(value);
-      
+
       default:
         return true; // Для неизвестных типов разрешаем все
     }
@@ -327,21 +309,21 @@ export class DataValidator {
       case 'parse_date':
         const date = new Date(value);
         return isNaN(date.getTime()) ? value : date.toISOString();
-      
+
       case 'string_to_boolean':
         if (typeof value === 'string') {
           const lowerValue = value.toLowerCase().trim();
           return ['true', 'yes', '1', 'да', 'истина', 'on'].includes(lowerValue);
         }
         return Boolean(value);
-      
+
       case 'string_to_uuid':
         if (typeof value === 'string') {
           const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
           return uuidPattern.test(value) ? value : null;
         }
         return value;
-      
+
       case 'normalize_phone':
         if (typeof value === 'string') {
           const digits = value.replace(/\D/g, '');
@@ -356,24 +338,21 @@ export class DataValidator {
           }
         }
         return value;
-      
+
       case 'normalize_email':
         if (typeof value === 'string') {
           return value.toLowerCase().trim();
         }
         return value;
-      
+
       case 'trim_string':
         return typeof value === 'string' ? value.trim() : value;
-      
+
       case 'concatenate_with_existing':
-        if (typeof value === 'string' && existingValue) {
-          return `${existingValue} | ${value}`;
-        } else if (typeof value === 'string') {
-          return value;
-        }
-        return existingValue || value;
-      
+        // В рамках простого преобразования мы не имеем доступа к существующим значениям,
+        // поэтому просто возвращаем значение как есть.
+        return value;
+
       default:
         return value;
     }
@@ -384,7 +363,7 @@ export class DataValidator {
    */
   private isValidEmail(email: string): boolean {
     if (!email || typeof email !== 'string') return false;
-    
+
     // Более гибкая валидация email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email.trim());
@@ -395,7 +374,7 @@ export class DataValidator {
    */
   private isValidPhone(phone: string): boolean {
     if (!phone || typeof phone !== 'string') return false;
-    
+
     // Убираем все символы кроме цифр и оставляем минимум 10 цифр
     const digits = phone.replace(/\D/g, '');
     return digits.length >= 10 && digits.length <= 15;
@@ -406,7 +385,7 @@ export class DataValidator {
    */
   private isValidUUID(uuid: string): boolean {
     if (!uuid || typeof uuid !== 'string') return false;
-    
+
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     return uuidRegex.test(uuid.trim());
   }
@@ -416,7 +395,7 @@ export class DataValidator {
    */
   private isValidURL(url: string): boolean {
     if (!url || typeof url !== 'string') return false;
-    
+
     try {
       new URL(url.trim());
       return true;
@@ -435,13 +414,25 @@ export class DataValidator {
         { field: 'электронная_почта', required: true, type: 'email', unique: true },
         { field: 'имя', type: 'string' }, // Убрали maxLength
         { field: 'фамилия', type: 'string' }, // Убрали maxLength
-        { field: 'телефон', type: 'phone' },
-        { field: 'компания', type: 'string' }, // Убрали maxLength
+        {
+          field: 'телефон', type: 'phone', custom: (val) => {
+            if (!val) return true;
+            const hasDigits = /\d/.test(val);
+            return hasDigits ? true : 'Телефон должен содержать цифры';
+          }
+        },
+        {
+          field: 'компания', type: 'string', custom: (val) => {
+            if (!val) return true;
+            const hasLetters = /[a-zA-Zа-яА-Я]/.test(val);
+            return hasLetters ? true : 'Название компании должно содержать буквы';
+          }
+        },
         { field: 'должность', type: 'string' }, // Убрали maxLength
         { field: 'телеграмма', type: 'string', maxLength: 100 },
         { field: 'реферальный_код', type: 'string', unique: true, maxLength: 50 }
       ],
-      
+
       'контакты': [
         { field: 'имя', type: 'string' }, // Убрали maxLength
         { field: 'фамилия', type: 'string' }, // Убрали maxLength
@@ -451,17 +442,17 @@ export class DataValidator {
         { field: 'google_id', type: 'string', maxLength: 100 },
         { field: 'день_рождения', type: 'date' }
       ],
-      
+
       'контактные_электронные_почты': [
         { field: 'электронная_почта', required: true, type: 'email' },
         { field: 'этикетка', type: 'string', maxLength: 100 }
       ],
-      
+
       'контактные_телефоны': [
         { field: 'телефон', required: true, type: 'phone' },
         { field: 'этикетка', type: 'string', maxLength: 100 }
       ],
-      
+
       'контактные_адреса': [
         { field: 'улица', type: 'string' }, // Убрали maxLength
         { field: 'город', type: 'string' }, // Убрали maxLength

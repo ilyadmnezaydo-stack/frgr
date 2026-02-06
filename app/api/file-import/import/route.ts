@@ -1,26 +1,58 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { FileImporter } from '@/lib/file-importer';
 import { supabase } from '@/lib/supabase';
+import { FieldMapping } from '@/lib/ai-data-mapper';
 
 export async function POST(request: NextRequest) {
   try {
     console.log('=== Starting import process ===');
-    
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const mappingsStr = formData.get('mappings') as string;
     const dryRunStr = formData.get('dryRun') as string;
+    const userId = formData.get('userId') as string;
 
-    console.log('Form data parsed:', { 
-      hasFile: !!file, 
-      fileName: file?.name, 
+    console.log('Form data parsed:', {
+      hasFile: !!file,
+      fileName: file?.name,
       hasMappings: !!mappingsStr,
-      dryRun: dryRunStr 
+      dryRun: dryRunStr,
+      userId: userId || 'not provided'
     });
 
     if (!file) {
       return NextResponse.json(
         { error: 'Файл не загружен' },
+        { status: 400 }
+      );
+    }
+
+    // Валидация размера файла (например, макс 5MB для серверных функций)
+    const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { error: 'Размер файла превышает допустимый лимит (5MB)' },
+        { status: 400 }
+      );
+    }
+
+    // Валидация типа файла
+    const allowedTypes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // xlsx
+      'application/vnd.ms-excel', // xls
+      'text/csv',
+      'application/csv',
+      'text/plain' // иногда CSV приходят так
+    ];
+
+    // Также проверим расширение имени файла как фоллбек
+    const fileName = file.name.toLowerCase();
+    const hasValidExtension = fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || fileName.endsWith('.csv');
+
+    if (!allowedTypes.includes(file.type) && !hasValidExtension) {
+      return NextResponse.json(
+        { error: 'Неподдерживаемый формат файла. Пожалуйста, используйте .xlsx, .xls или .csv' },
         { status: 400 }
       );
     }
@@ -50,8 +82,8 @@ export async function POST(request: NextRequest) {
 
     const importer = new FileImporter();
     console.log('FileImporter created, starting import...');
-    
-    const result = await importer.importFile(file, mappings, dryRun);
+
+    const result = await importer.importFile(file, mappings, dryRun, userId || undefined);
     console.log('Import result:', {
       success: result.success,
       totalRows: result.totalRows,
@@ -67,10 +99,10 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Error in import process:', error);
-    console.error('Error stack:', error.stack);
-    
+    console.error('Error stack:', (error as Error).stack);
+
     const errorMessage = error instanceof Error ? error.message : 'Внутренняя ошибка сервера';
-    
+
     return NextResponse.json(
       { error: errorMessage },
       { status: 500 }

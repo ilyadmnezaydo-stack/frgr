@@ -1,12 +1,9 @@
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 import { NextResponse } from 'next/server';
 
 export async function GET() {
   try {
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
+    // Используем глобальный инстанс supabase из lib/supabase.ts
 
     const { data, error } = await supabase
       .from('пользователи')
@@ -18,14 +15,14 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       count: data?.length || 0,
-      users: data 
+      users: data
     });
 
   } catch (error) {
-    return NextResponse.json({ 
+    return NextResponse.json({
       error: 'Failed to fetch users',
       details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });

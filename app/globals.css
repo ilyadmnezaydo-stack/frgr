@@ -2,35 +2,285 @@
 @tailwind components;
 @tailwind utilities;
 
+/* FRGR AI Data Mapper - Purple Gradient Design System */
+
 @layer base {
   :root {
-    --font-inter: 'Inter', system-ui, -apple-system, sans-serif;
+    /* Core Background */
+    --background: 240 20% 99%;
+    --foreground: 220 13% 18%;
+
+    /* Cards & Surfaces */
+    --card: 0 0% 100%;
+    --card-foreground: 220 13% 18%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 13% 18%;
+
+    /* Primary Purple */
+    --primary: 258 90% 66%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary */
+    --secondary: 240 20% 97%;
+    --secondary-foreground: 220 13% 18%;
+
+    /* Muted */
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+
+    /* Accent */
+    --accent: 258 90% 95%;
+    --accent-foreground: 258 90% 50%;
+
+    /* Destructive */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Success */
+    --success: 160 84% 39%;
+    --success-foreground: 0 0% 100%;
+
+    /* Warning */
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    /* Borders & Inputs */
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 258 90% 66%;
+
+    --radius: 0.75rem;
+
+    /* Sidebar */
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 258 90% 66%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 258 90% 95%;
+    --sidebar-accent-foreground: 258 90% 50%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 258 90% 66%;
+  }
+
+  .dark {
+    --background: 240 10% 4%;
+    --foreground: 0 0% 98%;
+
+    --card: 240 10% 6%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 240 10% 6%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 258 90% 66%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 240 10% 12%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 240 10% 15%;
+    --muted-foreground: 240 5% 65%;
+
+    --accent: 258 50% 20%;
+    --accent-foreground: 258 90% 80%;
+
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 98%;
+
+    --success: 160 60% 30%;
+    --success-foreground: 0 0% 98%;
+
+    --warning: 38 60% 40%;
+    --warning-foreground: 0 0% 98%;
+
+    --border: 240 10% 18%;
+    --input: 240 10% 18%;
+    --ring: 258 90% 66%;
+
+    --sidebar-background: 240 10% 6%;
+    --sidebar-foreground: 240 5% 90%;
+    --sidebar-primary: 258 90% 66%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 258 50% 20%;
+    --sidebar-accent-foreground: 258 90% 80%;
+    --sidebar-border: 240 10% 18%;
+    --sidebar-ring: 258 90% 66%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
   }
 
   body {
-    @apply bg-background text-foreground;
-    font-feature-settings: 'rlig' 1, 'calt' 1;
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+@layer components {
+
+  /* Gradient Background */
+  .bg-gradient-page {
+    @apply bg-gradient-to-b from-purple-50/80 via-white to-white;
   }
 
-  * {
-    @apply border-border;
+  /* Glass Card Effect */
+  .glass-card {
+    @apply bg-white/80 backdrop-blur-sm border border-white/50 shadow-lg shadow-purple-100/30 rounded-2xl;
+  }
+
+  /* Gradient Text */
+  .text-gradient {
+    @apply bg-gradient-to-r from-purple-600 to-violet-500 bg-clip-text text-transparent;
+  }
+
+  /* Upload Zone */
+  .upload-zone {
+    @apply border-2 border-dashed border-purple-300 rounded-2xl bg-white/60 backdrop-blur-sm hover:border-purple-500 hover:bg-purple-50/50 transition-all duration-300 cursor-pointer;
+  }
+
+  .upload-zone-active {
+    @apply border-purple-500 bg-purple-50/70 scale-[1.02];
+  }
+
+  /* Confidence Badges */
+  .badge-high {
+    @apply bg-emerald-100 text-emerald-700 border border-emerald-200;
+  }
+
+  .badge-medium {
+    @apply bg-amber-100 text-amber-700 border border-amber-200;
+  }
+
+  .badge-low {
+    @apply bg-red-100 text-red-700 border border-red-200;
+  }
+
+  /* Data Table Styles */
+  .table-source {
+    @apply bg-slate-50/80;
+  }
+
+  .table-target {
+    @apply bg-white;
+  }
+
+  /* Smooth Transitions */
+  .transition-view {
+    @apply transition-all duration-700 ease-in-out;
+  }
+
+  .fade-slide-up {
+    animation: fadeSlideUp 700ms ease-out forwards;
+  }
+
+  .fade-out {
+    animation: fadeOut 500ms ease-out forwards;
+  }
+
+  .fade-in {
+    animation: fadeIn 500ms ease-out forwards;
+  }
+
+  /* Progress Bar Animation */
+  .progress-animated {
+    @apply bg-gradient-to-r from-purple-600 via-violet-500 to-purple-600 bg-[length:200%_100%];
+    animation: shimmer 2s linear infinite;
+  }
+
+  /* Floating Badge */
+  .floating-badge {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-full bg-purple-100/80 text-purple-700 text-sm font-medium border border-purple-200/50 backdrop-blur-sm;
+  }
+
+  /* Stat Card */
+  .stat-card {
+    @apply bg-white rounded-xl p-6 shadow-md shadow-purple-100/40 border border-gray-100 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300;
+  }
+
+  /* Action Footer */
+  .action-footer {
+    @apply sticky bottom-0 bg-white/95 backdrop-blur-md border-t border-gray-200 shadow-[0_-4px_20px_rgba(139,92,246,0.1)] py-4 px-6;
+  }
+
+  /* Modal Overlay */
+  .modal-overlay {
+    @apply fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center;
   }
 }
 
 @layer utilities {
-  .glass {
-    background: rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+
+  /* Gradient Background Orbs (decorative) */
+  .orb-purple {
+    @apply absolute rounded-full bg-purple-400/20 blur-3xl;
   }
 
-  .terminal-cursor::after {
-    content: '▋';
-    animation: blink 1s step-end infinite;
+  .orb-violet {
+    @apply absolute rounded-full bg-violet-400/20 blur-3xl;
+  }
+}
+
+/* Keyframe Animations */
+@keyframes fadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
   }
 
-  @keyframes blink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0; }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.95);
+    opacity: 1;
+  }
+
+  50% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+
+  100% {
+    transform: scale(0.95);
+    opacity: 1;
   }
 }

@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: frgr-app
+    restart: unless-stopped
+    env_file:
+      - .env.local
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_TELEMETRY_DISABLED=1
+    volumes:
+      - ./uploads:/app/uploads
+    networks:
+      - frgr-network
+  # Optional: Add Redis for caching (if needed)
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: frgr-redis
+  #   restart: unless-stopped
+  #   ports:
+  #     - "6379:6379"
+  #   networks:
+  #     - frgr-network
+
+networks:
+  frgr-network:
+    driver: bridge

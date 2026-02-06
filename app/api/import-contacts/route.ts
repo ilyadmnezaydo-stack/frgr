@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
-// Константа: ID тестового пользователя
-const TEST_USER_ID = '00000000-0000-0000-0000-000000000001';
+// Получаем ID пользователя из сессии или запроса
+function getUserId(body: ImportRequest): string {
+    return body.userId || body.user_id || '00000000-0000-0000-0000-000000000001';
+}
 
 interface ContactData {
     имя?: string;
@@ -24,14 +26,19 @@ interface ContactData {
 interface ImportRequest {
     rows: Record<string, any>[];
     mapping: Record<keyof ContactData, string>;
+    userId?: string;
+    user_id?: string;
 }
 
 export async function POST(request: NextRequest) {
     try {
         const body: ImportRequest = await request.json();
         const { rows, mapping } = body;
+        
+        // Получаем реальный ID пользователя
+        const userId = getUserId(body);
 
-        console.log(`📥 Starting import of ${rows.length} contacts...`);
+        console.log(`📥 Starting import of ${rows.length} contacts for user: ${userId}`);
 
         const result = {
             successful: 0,
@@ -43,11 +50,8 @@ export async function POST(request: NextRequest) {
             const row = rows[i];
 
             try {
-                // Конструируем payload для таблицы контакты
-                const contactPayload: any = {
-                    ID_пользователя: TEST_USER_ID,
-                    источник: 'excel_import',
-                };
+                // Конструируем payload для таблицы contacts
+                const contactPayload: any = {};
 
                 // Helper to safely get value
                 const getVal = (key: keyof ContactData) => {
@@ -57,18 +61,28 @@ export async function POST(request: NextRequest) {
                     return val ? String(val).trim() : null;
                 };
 
-                contactPayload.имя = getVal('имя');
-                contactPayload.фамилия = getVal('фамилия');
-                contactPayload.компания = getVal('компания');
-                contactPayload.должность = getVal('должность');
-                contactPayload.примечания = getVal('примечания');
-                contactPayload.linkedin_url = getVal('linkedin_url');
+                contactPayload.full_name = getVal('имя');
+                contactPayload.company = getVal('компания');
+                contactPayload.position = getVal('должность');
+                contactPayload.notes = getVal('примечания');
+                contactPayload.linkedin = getVal('linkedin_url');
+
+                // Добавляем email и телефон в основной контакт
+                const email = getVal('электронная_почта');
+                if (email) {
+                    contactPayload.email = email;
+                }
+
+                const phone = getVal('телефон');
+                if (phone) {
+                    contactPayload.phone = phone;
+                }
 
                 // Парсим дату рождения
                 const birthDateStr = getVal('день_рождения');
                 if (birthDateStr) {
                     try {
-                        contactPayload.день_рождения = new Date(birthDateStr).toISOString().split('T')[0];
+                        contactPayload.birth_date = new Date(birthDateStr).toISOString().split('T')[0];
                     } catch {
                         // Если не удалось распарсить дату, пропускаем
                     }
@@ -79,11 +93,11 @@ export async function POST(request: NextRequest) {
 
                 // 1. Добавляем mapped поля, которых нет в основной таблице
                 const extraMappedFields = {
-                    'страна': getVal('страна'),
-                    'рейтинг': getVal('рейтинг'),
-                    'сеть': getVal('сеть'),
+                    'country': getVal('страна'),
+                    'rating': getVal('рейтинг'),
+                    'network': getVal('сеть'),
                     'website': getVal('website'),
-                    'телеграмма': getVal('телеграмма'),
+                    'telegram': getVal('телеграмма'),
                 };
 
                 Object.entries(extraMappedFields).forEach(([label, value]) => {
@@ -104,46 +118,24 @@ export async function POST(request: NextRequest) {
                     }
                 });
 
-                // 3. Формируем поле примечаний
+                // 3. Формируем поле notes
                 if (unusedData.length > 0) {
                     const formattedUnusedData = unusedData.join('\n');
-                    contactPayload.примечания = contactPayload.примечания
-                        ? `${formattedUnusedData}\n\n${contactPayload.примечания}`
+                    contactPayload.notes = contactPayload.notes
+                        ? `${formattedUnusedData}\n\n${contactPayload.notes}`
                         : formattedUnusedData;
                 }
 
-                // Вставляем контакт
+                // Вставляем контакт в таблицу contacts (на английском)
                 const { data: contact, error: contactError } = await supabase
-                    .from('контакты')
+                    .from('contacts')
                     .insert(contactPayload)
-                    .select('идентификатор')
+                    .select('id')
                     .single();
 
                 if (contactError) throw contactError;
 
-                const contactId = (contact as any)?.['идентификатор'];
-
-                // Если есть email, создаем запись в контактные_электронные_почты
-                const email = getVal('электронная_почта');
-                if (email) {
-                    await supabase.from('контактные_электронные_почты').insert({
-                        контактный_идентификатор: contactId,
-                        электронная_почта: email,
-                        этикетка: 'work',
-                        is_primary: true,
-                    });
-                }
-
-                // Если есть телефон, создаем запись в контактные_телефоны
-                const phone = getVal('телефон');
-                if (phone) {
-                    await supabase.from('контактные_телефоны').insert({
-                        контактный_идентификатор: contactId,
-                        телефон: phone,
-                        этикетка: 'work',
-                        is_primary: true,
-                    });
-                }
+                const contactId = (contact as any)?.['id'];
 
                 result.successful++;
 

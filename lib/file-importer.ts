@@ -25,11 +25,11 @@ export class FileImporter {
   constructor() {
     this.aiMapper = new AIDataMapper();
     this.validator = new DataValidator();
-    
-    // Добавляем правила валидации для таблицы пользователей
+
+    // Добавляем правила валидации для таблицы contacts
     const commonRules = DataValidator.getCommonRules();
-    if (commonRules['пользователи']) {
-      this.validator.addTableRules('пользователи', commonRules['пользователи']);
+    if (commonRules['contacts']) {
+      this.validator.addTableRules('contacts', commonRules['contacts']);
     }
   }
 
@@ -41,7 +41,7 @@ export class FileImporter {
       console.log('Starting file parsing for:', file.name);
       const data = await this.parseFile(file);
       console.log('File parsed, rows count:', data.length);
-      
+
       if (data.length === 0) {
         throw new Error('Файл не содержит данных');
       }
@@ -63,8 +63,8 @@ export class FileImporter {
 
       console.log('Source schema created');
 
-      // Получаем схему целевой таблицы (пользователи)
-      const targetSchema = await this.getTargetTableSchema('пользователи');
+      // Получаем схему целевой таблицы (contacts)
+      const targetSchema = await this.getTargetTableSchema('contacts');
 
       if (!targetSchema) {
         throw new Error('Не удалось получить схему целевой таблицы');
@@ -93,19 +93,21 @@ export class FileImporter {
    * Импортирует данные из файла в таблицу пользователей
    */
   async importFile(
-    file: File, 
+    file: File,
     mappings: FieldMapping[],
-    dryRun: boolean = false
+    dryRun: boolean = false,
+    userId?: string
   ): Promise<ImportResult> {
     try {
       console.log('=== Starting file import ===');
       console.log('File:', file.name, 'Size:', file.size);
       console.log('Mappings:', mappings.length);
       console.log('Dry run:', dryRun);
-      
+      if (userId) console.log('User ID:', userId);
+
       const data = await this.parseFile(file);
       console.log('File parsed, rows:', data.length);
-      
+
       if (data.length === 0) {
         throw new Error('Файл не содержит данных');
       }
@@ -114,7 +116,7 @@ export class FileImporter {
       const validationResult = await this.validator.validateAndTransform(
         data,
         mappings,
-        'пользователи'
+        'contacts'
       );
       console.log('Validation completed:', {
         isValid: validationResult.isValid,
@@ -136,9 +138,6 @@ export class FileImporter {
       });
 
       if (dryRun) {
-        console.log('Returning dry run result');
-        console.log('Preview data sample:', validationResult.transformedData?.[0]);
-        console.log('Preview data примечания length:', validationResult.transformedData?.[0]?.примечания?.length);
         return {
           success: validationResult.isValid,
           totalRows: data.length,
@@ -151,72 +150,65 @@ export class FileImporter {
 
       // Реальный импорт данных
       let importedRows = 0;
-      
+
       if (validationResult.transformedData && validationResult.transformedData.length > 0) {
-        console.log('Starting real import to Supabase...');
-        console.log('Data to import:', JSON.stringify(validationResult.transformedData, null, 2));
-        
+
         try {
           // Импортируем Supabase клиент
           const { createClient } = await import('@supabase/supabase-js');
-          
+
           // Создаем клиент Supabase с сервисным ключом (если есть) или с анонимным
           const supabase = createClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,
             process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
           );
-          
+
           // Подготавливаем данные для вставки
-          const dataToInsert = validationResult.transformedData.map(row => {
-            const cleanRow = { ...row };
-            
-            // Оставляем только поля, которые точно есть в реальной базе данных
-            const allowedFields = [
-              'идентификатор',
-              'электронная_почта', 
-              'имя', // Добавили поле имя
-              'фамилия', // Добавили поле фамилия
-              'телефон',
-              'компания',
-              'должность',
-              'телеграмма',
-              'аватар_url',
-              'био', // Добавили поле био
-              'создано_в',
-              'обновлено_в'
-            ];
-            
-            // Удаляем поля, которых нет в таблице
-            Object.keys(cleanRow).forEach(key => {
-              if (!allowedFields.includes(key)) {
-                console.log(`Removing field '${key}' from import data`);
-                delete cleanRow[key];
+          const rowsWithErrors = new Set(validationResult.errors.map(e => e.row).filter(r => r !== undefined));
+
+          const dataToInsert = validationResult.transformedData
+            .filter((_, index) => !rowsWithErrors.has(index)) // Исключаем строки с ошибками
+            .map(row => {
+              const cleanRow = { ...row };
+
+              // Добавляем ID пользователя если предоставлен
+              if (userId) {
+                cleanRow.ID_пользователя = userId;
               }
+
+              return cleanRow;
             });
-            
-            return cleanRow;
-          });
-          
-          console.log('Cleaned data to insert:', JSON.stringify(dataToInsert, null, 2));
-          
-          // Реальная вставка в Supabase
-          const { data: insertedData, error } = await supabase
-            .from('пользователи')
-            .insert(dataToInsert)
-            .select();
-            
-          if (error) {
-            console.error('Supabase insert error:', error);
-            errors.push(`Ошибка базы данных: ${error.message}`);
-            importedRows = 0;
-          } else {
-            importedRows = insertedData?.length || dataToInsert.length;
-            console.log('Successfully imported', importedRows, 'rows to Supabase');
-            console.log('Inserted data:', insertedData);
+
+          console.log(`Rows to insert: ${dataToInsert.length} (filtered ${rowsWithErrors.size} rows with errors)`);
+
+          if (dataToInsert.length === 0 && validationResult.transformedData.length > 0) {
+            console.warn('All rows were filtered out due to validation errors.');
           }
+
+            if (dataToInsert.length > 0) {
+            // Реальная вставка в Supabase
+            const { data: insertedData, error } = await supabase
+              .from('contacts')
+              .insert(dataToInsert)
+              .select();
+
+            if (error) {
+              console.error('Supabase insert error:', error);
+              errors.push(`Ошибка базы данных: ${error.message}`);
+              importedRows = 0;
+            } else {
+              importedRows = insertedData?.length || dataToInsert.length;
+              console.log('Successfully imported', importedRows, 'rows to Supabase');
+            }
+          } else {
+            // Если вставить нечего
+            importedRows = 0;
+          }
+
         } catch (dbError) {
           console.error('Database connection error:', dbError);
-          errors.push(`Ошибка подключения к базе данных: ${dbError.message}`);
+          const errorMessage = dbError instanceof Error ? dbError.message : 'Unknown database error';
+          errors.push(`Ошибка подключения к базе данных: ${errorMessage}`);
           importedRows = 0;
         }
       }
@@ -231,12 +223,12 @@ export class FileImporter {
 
     } catch (error) {
       console.error('Error importing file:', error);
-      console.error('Error stack:', error.stack);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       return {
         success: false,
         totalRows: 0,
         importedRows: 0,
-        errors: [`Ошибка импорта: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`],
+        errors: [`Ошибка импорта: ${errorMessage}`],
         warnings: []
       };
     }
@@ -248,12 +240,12 @@ export class FileImporter {
   private async parseFile(file: File): Promise<any[]> {
     try {
       console.log('Starting file read...');
-      
+
       // Конвертируем File в Buffer для server-side обработки
       const arrayBuffer = await file.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
       console.log('Buffer created, length:', buffer.length);
-      
+
       const workbook = XLSX.read(buffer, { type: 'buffer', codepage: 65001 });
       console.log('Workbook created, sheets:', workbook.SheetNames);
 
@@ -279,7 +271,7 @@ export class FileImporter {
       // Первая строка - заголовки
       const headers = jsonData[0] as string[];
       console.log('Raw headers:', headers);
-      
+
       // Очищаем заголовки от проблемных символов и пустых значений
       const cleanHeaders = headers.map((header, index) => {
         console.log(`Processing header ${index}: "${header}"`);
@@ -293,17 +285,17 @@ export class FileImporter {
         console.log(`Header is not string: ${header}`);
         return header || null;
       }).filter(h => h !== null); // Убираем пустые заголовки
-      
+
       console.log('Final clean headers:', cleanHeaders);
-      
+
       console.log('Clean headers:', cleanHeaders);
-      
+
       const rows = jsonData.slice(1) as any[][];
 
       // Конвертируем в массив объектов с улучшенной обработкой
       const result = rows.map((row, rowIndex) => {
         const obj: any = {};
-        
+
         // Используем только чистые заголовки
         cleanHeaders.forEach((cleanHeader, headerIndex) => {
           // Находим индекс этого заголовка в оригинальных данных
@@ -314,28 +306,28 @@ export class FileImporter {
             }
             return h === cleanHeader;
           });
-          
+
           if (originalIndex !== -1) {
             let value = row[originalIndex] || '';
-            
+
             // Очищаем значение от проблемных символов
             if (typeof value === 'string') {
               value = value.replace(/^\uFEFF/, '').trim();
-              
+
               // Убираем лишние пробелы и нормализуем
               value = value.replace(/\s+/g, ' ').trim();
-              
+
               // Если значение пустое после очистки, ставим null
               if (value === '') {
                 value = null;
               }
             }
-            
+
             // Используем очищенный заголовок как ключ
             obj[cleanHeader] = value;
           }
         });
-        
+
         return obj;
       }).filter(row => {
         // Убираем полностью пустые строки
@@ -356,14 +348,14 @@ export class FileImporter {
    */
   private inferColumnType(data: any[], columnName: string): string {
     const sampleValues = data.slice(0, 10).map(row => row[columnName]).filter(val => val !== null && val !== undefined && val !== '');
-    
+
     if (sampleValues.length === 0) return 'VARCHAR';
 
     const columnNameLower = columnName.toLowerCase();
 
     // Email detection с улучшенной логикой
     if (columnNameLower.includes('mail') || columnNameLower.includes('почта') || columnNameLower.includes('email')) {
-      const emailCount = sampleValues.filter(val => 
+      const emailCount = sampleValues.filter(val =>
         typeof val === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)
       ).length;
       if (emailCount > sampleValues.length * 0.8) return 'VARCHAR';
@@ -371,7 +363,7 @@ export class FileImporter {
 
     // Phone detection с улучшенными паттернами
     if (columnNameLower.includes('phone') || columnNameLower.includes('телефон') || columnNameLower.includes('tel')) {
-      const phoneCount = sampleValues.filter(val => 
+      const phoneCount = sampleValues.filter(val =>
         typeof val === 'string' && this.isValidPhone(val)
       ).length;
       if (phoneCount > sampleValues.length * 0.8) return 'VARCHAR';
@@ -379,7 +371,7 @@ export class FileImporter {
 
     // Name detection
     if (columnNameLower.includes('name') || columnNameLower.includes('имя') || columnNameLower.includes('fname') || columnNameLower.includes('lname')) {
-      const nameCount = sampleValues.filter(val => 
+      const nameCount = sampleValues.filter(val =>
         typeof val === 'string' && this.isValidName(val)
       ).length;
       if (nameCount > sampleValues.length * 0.8) return 'VARCHAR';
@@ -387,7 +379,7 @@ export class FileImporter {
 
     // Company detection
     if (columnNameLower.includes('company') || columnNameLower.includes('компания') || columnNameLower.includes('org') || columnNameLower.includes('work')) {
-      const companyCount = sampleValues.filter(val => 
+      const companyCount = sampleValues.filter(val =>
         typeof val === 'string' && this.isValidCompanyName(val)
       ).length;
       if (companyCount > sampleValues.length * 0.8) return 'VARCHAR';
@@ -395,7 +387,7 @@ export class FileImporter {
 
     // URL detection
     if (columnNameLower.includes('url') || columnNameLower.includes('link') || columnNameLower.includes('profile')) {
-      const urlCount = sampleValues.filter(val => 
+      const urlCount = sampleValues.filter(val =>
         typeof val === 'string' && this.isValidUrl(val)
       ).length;
       if (urlCount > sampleValues.length * 0.8) return 'TEXT';
@@ -410,7 +402,7 @@ export class FileImporter {
     if (dateCount > sampleValues.length * 0.8) return 'TIMESTAMPTZ';
 
     // Проверяем длинные текстовые поля
-    const longTextCount = sampleValues.filter(val => 
+    const longTextCount = sampleValues.filter(val =>
       typeof val === 'string' && val.length > 255
     ).length;
     if (longTextCount > sampleValues.length * 0.5) return 'TEXT';
@@ -432,7 +424,7 @@ export class FileImporter {
   private isValidName(name: string): boolean {
     if (typeof name !== 'string' || name.length < 2) return false;
     if (name.length > 50) return false;
-    
+
     const namePattern = /^[a-zA-Zа-яА-Я\s\-']+$/;
     return namePattern.test(name) && !this.isValidEmail(name) && !this.isValidPhone(name);
   }
@@ -442,9 +434,9 @@ export class FileImporter {
    */
   private isValidCompanyName(company: string): boolean {
     if (typeof company !== 'string' || company.length < 2) return false;
-    
+
     if (this.isValidEmail(company) || this.isValidPhone(company)) return false;
-    
+
     const companyPattern = /^[a-zA-Zа-яА-Я0-9\s\-\.\&\,\(\)]+$/;
     return companyPattern.test(company);
   }
@@ -463,12 +455,12 @@ export class FileImporter {
     if (typeof date === 'object' && date instanceof Date) {
       return !isNaN(date.getTime());
     }
-    
+
     if (typeof date === 'string') {
       const parsed = new Date(date);
       return !isNaN(parsed.getTime());
     }
-    
+
     return false;
   }
 
@@ -492,7 +484,7 @@ export class FileImporter {
       const val = row[columnName];
       return val === null || val === undefined || val === '';
     }).length;
-    
+
     return emptyCount > 0;
   }
 
@@ -501,29 +493,53 @@ export class FileImporter {
    */
   private async getTargetTableSchema(tableName: string): Promise<TableSchema | null> {
     try {
-      // Временно возвращаем схему hardcoded для таблицы пользователи
-      // В реальном приложении здесь будет запрос к Supabase
-      if (tableName === 'пользователи') {
-        return {
-          tableName: 'пользователи',
-          columns: [
-            { name: 'идентификатор', type: 'UUID', nullable: false },
-            { name: 'электронная_почта', type: 'VARCHAR', nullable: false },
-            { name: 'имя', type: 'VARCHAR', nullable: true }, // Добавили поле имя
-            { name: 'фамилия', type: 'VARCHAR', nullable: true }, // Добавили поле фамилия
-            { name: 'телефон', type: 'VARCHAR', nullable: true },
-            { name: 'компания', type: 'VARCHAR', nullable: true },
-            { name: 'должность', type: 'VARCHAR', nullable: true },
-            { name: 'телеграмма', type: 'VARCHAR', nullable: true },
-            { name: 'аватар_url', type: 'TEXT', nullable: true },
-            { name: 'био', type: 'TEXT', nullable: true }, // Добавили поле био
-            { name: 'создано_в', type: 'TIMESTAMPTZ', nullable: false },
-            { name: 'обновлено_в', type: 'TIMESTAMPTZ', nullable: false }
-          ]
-        };
+      // Создаем клиент с сервисным ключом для доступа к метаданным
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabaseAdmin = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      );
+
+      // Сначала пробуем получить данные из таблицы чтобы понять структуру
+      const { data: sampleData, error: sampleError } = await supabaseAdmin
+        .from(tableName)
+        .select('*')
+        .limit(1);
+
+      if (sampleError) {
+        console.error('Error accessing table:', sampleError);
+        return null;
       }
 
-      return null;
+      if (!sampleData || sampleData.length === 0) {
+        console.warn(`No data found in table ${tableName}`);
+        return null;
+      }
+
+      // Инферим схему из данных
+      const row = sampleData[0];
+      const columns: ColumnInfo[] = Object.keys(row).map(key => {
+        const val = row[key];
+        let type = 'VARCHAR'; // Default
+        if (typeof val === 'number') type = Number.isInteger(val) ? 'INTEGER' : 'FLOAT';
+        if (typeof val === 'boolean') type = 'BOOLEAN';
+        if (typeof val === 'object') type = 'JSONB';
+        // Проверка на дату
+        if (typeof val === 'string' && !isNaN(Date.parse(val)) && (val.includes('-') || val.includes('T'))) type = 'TIMESTAMPTZ';
+
+        return {
+          name: key,
+          type: type,
+          nullable: true, // Не можем знать наверняка
+          sampleValues: sampleData.map(d => d[key]).slice(0, 5)
+        };
+      });
+
+      return {
+        tableName,
+        columns
+      };
+
     } catch (error) {
       console.error('Error getting target table schema:', error);
       return null;
